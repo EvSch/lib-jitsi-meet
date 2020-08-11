@@ -375,6 +375,11 @@ JitsiConference.prototype._init = function(options = {}) {
         Statistics.analytics.addPermanentProperties({
             'callstats_name': this._statsCurrentId
         });
+
+        // Start performance observer for monitoring long tasks
+        if (config.longTasksStatsInterval) {
+            this.statistics.attachLongTasksStats(this);
+        }
     }
 
     this.eventManager.setupChatRoomListeners();
@@ -717,6 +722,16 @@ JitsiConference.prototype.getLocalAudioTrack = function() {
  */
 JitsiConference.prototype.getLocalVideoTrack = function() {
     return this.rtc ? this.rtc.getLocalVideoTrack() : null;
+};
+
+/**
+ * Obtains the performance statistics.
+ * @returns {Object|null}
+ */
+JitsiConference.prototype.getPerformanceStats = function() {
+    return {
+        longTasksStats: this.statistics.getLongTasksStats()
+    };
 };
 
 /**
