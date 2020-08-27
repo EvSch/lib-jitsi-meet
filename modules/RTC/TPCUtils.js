@@ -192,9 +192,11 @@ export class TPCUtils {
     /**
     * Adds {@link JitsiLocalTrack} to the WebRTC peerconnection for the first time.
     * @param {JitsiLocalTrack} track - track to be added to the peerconnection.
+    * @param {boolean} isInitiator - boolean that indicates if the endpoint is offerer
+    * in a p2p connection.
     * @returns {void}
     */
-    addTrack(localTrack, isInitiator = true) {
+    addTrack(localTrack, isInitiator) {
         const track = localTrack.getTrack();
 
         if (isInitiator) {
@@ -254,10 +256,7 @@ export class TPCUtils {
             return Promise.resolve();
         }
 
-        return transceiver.sender.replaceTrack(track)
-            .then(() => {
-                this.pc.localTracks.set(localTrack.rtcId, localTrack);
-            });
+        return transceiver.sender.replaceTrack(track);
     }
 
     /**
@@ -287,8 +286,7 @@ export class TPCUtils {
     /**
      * Removes the track from the RTCRtpSender as part of the mute operation.
      * @param {JitsiLocalTrack} localTrack - track to be removed.
-     * @returns {Promise<boolean>} - Promise that resolves to false if unmute
-     * operation is successful, a reject otherwise.
+     * @returns {Promise<void>} - resolved when done.
      */
     removeTrackMute(localTrack) {
         const mediaType = localTrack.getType();
@@ -301,12 +299,7 @@ export class TPCUtils {
 
         logger.debug(`Removing ${localTrack} on ${this.pc}`);
 
-        return transceiver.sender.replaceTrack(null)
-            .then(() => {
-                this.pc.localTracks.delete(localTrack.rtcId);
-
-                return Promise.resolve(false);
-            });
+        return transceiver.sender.replaceTrack(null);
     }
 
     /**
@@ -375,7 +368,7 @@ export class TPCUtils {
     * @returns {void}
     */
     setAudioTransferActive(active) {
-        this.setMediaTransferActive('audio', active);
+        this.setMediaTransferActive(MediaType.AUDIO, active);
     }
 
     /**
@@ -407,6 +400,7 @@ export class TPCUtils {
             .filter(t => t.receiver && t.receiver.track && t.receiver.track.kind === mediaType);
         const localTracks = this.pc.getLocalTracks(mediaType);
 
+        logger.info(`${active ? 'Enabling' : 'Suspending'} ${mediaType} media transfer on ${this.pc}`);
         transceivers.forEach((transceiver, idx) => {
             if (active) {
                 // The first transceiver is for the local track and only this one can be set to 'sendrecv'
@@ -431,6 +425,6 @@ export class TPCUtils {
     * @returns {void}
     */
     setVideoTransferActive(active) {
-        this.setMediaTransferActive('video', active);
+        this.setMediaTransferActive(MediaType.VIDEO, active);
     }
 }

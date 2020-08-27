@@ -1572,6 +1572,7 @@ TraceablePeerConnection.prototype.containsTrack = function(track) {
 /**
  * Add {@link JitsiLocalTrack} to this TPC.
  * @param {JitsiLocalTrack} track
+ * @param {boolean} isInitiator indicates if the endpoint is the offerer.
  * @returns {Promise<void>} - resolved when done.
  */
 TraceablePeerConnection.prototype.addTrack = function(track, isInitiator = false) {
@@ -1585,50 +1586,55 @@ TraceablePeerConnection.prototype.addTrack = function(track, isInitiator = false
     }
 
     this.localTracks.set(rtcId, track);
-    if (browser.usesUnifiedPlan() && isInitiator) {
+
+    // For p2p unified case, use addTransceiver API to add the tracks on the peerconnection.
+    if (browser.usesUnifiedPlan() && this.isP2P) {
         this.tpcUtils.addTrack(track, isInitiator);
+    } else {
+        // In all other cases, i.e., plan-b and unified plan bridge case, use addStream API to
+        // add the track to the peerconnection.
+        // TODO - addTransceiver doesn't generate a MSID for the stream, which is needed for signaling
+        // the ssrc to Jicofo. Switch to using UUID as MSID when addTransceiver is used in Unified plan
+        // JVB connection case as well.
+        const webrtcStream = track.getOriginalStream();
 
-        return Promise.resolve();
-    }
+        if (webrtcStream) {
+            this._addStream(webrtcStream);
 
-    const webrtcStream = track.getOriginalStream();
-
-    if (webrtcStream) {
-        this._addStream(webrtcStream);
-
-    // It's not ok for a track to not have a WebRTC stream if:
-    } else if (!browser.doesVideoMuteByStreamRemove()
-                || track.isAudioTrack()
-                || (track.isVideoTrack() && !track.isMuted())) {
-        return Promise.reject(new Error(`${this} no WebRTC stream for: ${track}`));
-    }
-
-    // Muted video tracks do not have WebRTC stream
-    if (browser.usesPlanB() && browser.doesVideoMuteByStreamRemove()
-            && track.isVideoTrack() && track.isMuted()) {
-        const ssrcInfo = this.generateNewStreamSSRCInfo(track);
-
-        this.sdpConsistency.setPrimarySsrc(ssrcInfo.ssrcs[0]);
-        const simGroup
-            = ssrcInfo.groups.find(groupInfo => groupInfo.semantics === 'SIM');
-
-        if (simGroup) {
-            this.simulcast.setSsrcCache(simGroup.ssrcs);
+        // It's not ok for a track to not have a WebRTC stream if:
+        } else if (!browser.doesVideoMuteByStreamRemove()
+                    || track.isAudioTrack()
+                    || (track.isVideoTrack() && !track.isMuted())) {
+            return Promise.reject(new Error(`${this} no WebRTC stream for: ${track}`));
         }
-        const fidGroups
-            = ssrcInfo.groups.filter(
-                groupInfo => groupInfo.semantics === 'FID');
 
-        if (fidGroups) {
-            const rtxSsrcMapping = new Map();
+        // Muted video tracks do not have WebRTC stream
+        if (browser.usesPlanB() && browser.doesVideoMuteByStreamRemove()
+                && track.isVideoTrack() && track.isMuted()) {
+            const ssrcInfo = this.generateNewStreamSSRCInfo(track);
 
-            fidGroups.forEach(fidGroup => {
-                const primarySsrc = fidGroup.ssrcs[0];
-                const rtxSsrc = fidGroup.ssrcs[1];
+            this.sdpConsistency.setPrimarySsrc(ssrcInfo.ssrcs[0]);
+            const simGroup
+                = ssrcInfo.groups.find(groupInfo => groupInfo.semantics === 'SIM');
 
-                rtxSsrcMapping.set(primarySsrc, rtxSsrc);
-            });
-            this.rtxModifier.setSsrcCache(rtxSsrcMapping);
+            if (simGroup) {
+                this.simulcast.setSsrcCache(simGroup.ssrcs);
+            }
+            const fidGroups
+                = ssrcInfo.groups.filter(
+                    groupInfo => groupInfo.semantics === 'FID');
+
+            if (fidGroups) {
+                const rtxSsrcMapping = new Map();
+
+                fidGroups.forEach(fidGroup => {
+                    const primarySsrc = fidGroup.ssrcs[0];
+                    const rtxSsrc = fidGroup.ssrcs[1];
+
+                    rtxSsrcMapping.set(primarySsrc, rtxSsrc);
+                });
+                this.rtxModifier.setSsrcCache(rtxSsrcMapping);
+            }
         }
     }
 
@@ -1651,9 +1657,6 @@ TraceablePeerConnection.prototype.addTrack = function(track, isInitiator = false
  * Promise is rejected when something goes wrong.
  */
 TraceablePeerConnection.prototype.addTrackUnmute = function(track) {
-    if (browser.usesUnifiedPlan()) {
-        return this.tpcUtils.addTrackUnmute(track);
-    }
     if (!this._assertTrackBelongs('addTrackUnmute', track)) {
         // Abort
         return Promise.reject('Track not found on the peerconnection');
@@ -1668,6 +1671,11 @@ TraceablePeerConnection.prototype.addTrackUnmute = function(track) {
 
         return Promise.reject('Stream not found');
     }
+
+    if (browser.usesUnifiedPlan()) {
+        return this.tpcUtils.addTrackUnmute(track);
+    }
+
     this._addStream(webRtcStream);
 
     return Promise.resolve(true);
@@ -1826,9 +1834,6 @@ TraceablePeerConnection.prototype.replaceTrack = function(oldTrack, newTrack) {
  * Promise is rejected when something goes wrong.
  */
 TraceablePeerConnection.prototype.removeTrackMute = function(localTrack) {
-    if (browser.usesUnifiedPlan()) {
-        return this.tpcUtils.removeTrackMute(localTrack);
-    }
     const webRtcStream = localTrack.getOriginalStream();
 
     this.trace(
@@ -1839,6 +1844,11 @@ TraceablePeerConnection.prototype.removeTrackMute = function(localTrack) {
         // Abort - nothing to be done here
         return Promise.reject('Track not found in the peerconnection');
     }
+
+    if (browser.usesUnifiedPlan()) {
+        return this.tpcUtils.removeTrackMute(localTrack);
+    }
+
     if (webRtcStream) {
         logger.info(
             `Removing ${localTrack} as mute from ${this}`);
@@ -2089,8 +2099,8 @@ TraceablePeerConnection.prototype.setMaxBitRate = function() {
     // 2. Track is a desktop track and bitrate is capped using capScreenshareBitrate option in plan-b mode.
     // 3. The client is running in Unified plan mode.
     if (!((this.options.videoQuality && this.options.videoQuality.maxBitratesVideo)
-        || (browser.usesPlanB() && this.options.capScreenshareBitrate && videoType === VideoType.DESKTOP))
-        || browser.usesUnifiedPlan()) {
+        || (browser.usesPlanB() && this.options.capScreenshareBitrate && videoType === VideoType.DESKTOP)
+        || browser.usesUnifiedPlan())) {
         return Promise.resolve();
     }
 
@@ -2099,12 +2109,12 @@ TraceablePeerConnection.prototype.setMaxBitRate = function() {
     const videoSender = this.findSenderByKind(MediaType.VIDEO);
 
     if (!videoSender) {
-        return Promise.reject(new Error('RTCRtpSender not found for local video'));
+        return Promise.resolve();
     }
     const parameters = videoSender.getParameters();
 
     if (!(parameters.encodings && parameters.encodings.length)) {
-        return Promise.reject(new Error('RTCRtpEncodingParameters not found for local video'));
+        return Promise.resolve();
     }
 
     if (this.isSimulcastOn()) {
@@ -2248,12 +2258,12 @@ TraceablePeerConnection.prototype.setSenderVideoConstraint = function(frameHeigh
     const videoSender = this.findSenderByKind(MediaType.VIDEO);
 
     if (!videoSender) {
-        return Promise.reject(new Error('RTCRtpSender not found for local video'));
+        return Promise.resolve();
     }
     const parameters = videoSender.getParameters();
 
     if (!parameters || !parameters.encodings || !parameters.encodings.length) {
-        return Promise.reject(new Error('RTCRtpSendParameters not found for local video track'));
+        return Promise.resolve();
     }
 
     if (this.isSimulcastOn()) {
