@@ -98,7 +98,8 @@ export async function init(options) {
         throw new Error('Precall Test already initialized');
     }
     _initialized = true;
-
+    //Set default values
+    finalResults = {mediaConnectivity: false, rtt: 999, fractionalLoss: 0, throughput: 0};
     const test = checkInternet();
     const test2 = NetworkTest(UDP);
     if (!test2) {
