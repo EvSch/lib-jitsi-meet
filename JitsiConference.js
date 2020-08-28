@@ -3484,9 +3484,9 @@ JitsiConference.prototype.disableLobby = function() {
  * @param {string} email Optional email is used to present avatar to the moderator.
  * @returns {Promise<never>}
  */
-JitsiConference.prototype.joinLobby = function(displayName, email) {
+JitsiConference.prototype.joinLobby = function(displayName, email, avatarUrl) {
     if (this.room) {
-        return this.room.getLobby().join(displayName, email);
+        return this.room.getLobby().join(displayName, email, avatarUrl);
     }
 
     return Promise.reject(new Error('The conference not started'));

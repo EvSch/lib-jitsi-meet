@@ -132,7 +132,7 @@ export default class Lobby {
      * @param {string} email is optional.
      * @returns {Promise} resolves once we join the room.
      */
-    join(displayName, email) {
+    join(displayName, email, avatarUrl) {
         const isModerator = this.mainRoom.joined && this.mainRoom.isModerator();
 
         if (!this.lobbyRoomJid) {
@@ -160,7 +160,15 @@ export default class Lobby {
             });
         }
 
+        if (avatarUrl) {
+          this.lobbyRoom.removeFromPresence('avatar');
+          this.lobbyRoom.addToPresence('avatar', { value: avatarUrl });
+        }
+
         if (isModerator) {
+          this.lobbyRoom.addPresenceListener('avatar', (node, from) => {
+              this.mainRoom.eventEmitter.emit(XMPPEvents.MUC_LOBBY_MEMBER_UPDATED, from, { loadableAvatarUrl: node.value });
+          });
             this.lobbyRoom.addPresenceListener(EMAIL_COMMAND, (node, from) => {
                 this.mainRoom.eventEmitter.emit(XMPPEvents.MUC_LOBBY_MEMBER_UPDATED, from, { email: node.value });
             });
@@ -179,7 +187,7 @@ export default class Lobby {
                         XMPPEvents.MUC_LOBBY_MEMBER_JOINED,
                         Strophe.getResourceFromJid(from),
                         nick,
-                        identity ? identity.avatar : undefined
+                        identity ? identity.user : undefined
                     );
                 });
             this.lobbyRoom.addEventListener(
