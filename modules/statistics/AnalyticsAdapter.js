@@ -160,8 +160,8 @@ class AnalyticsAdapter {
             try {
                 handler.setUserProperties(this.permanentProperties);
             } catch (error) {
-                logger.warn('Error in setUserProperties method of one of the '
-                    + `analytics handlers: ${error}`);
+                /*logger.warn('Error in setUserProperties method of one of the '
+                    + `analytics handlers: ${error}`);*/
             }
         });
     }
