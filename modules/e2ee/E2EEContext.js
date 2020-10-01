@@ -23,17 +23,8 @@ const kJitsiE2EE = Symbol('kJitsiE2EE');
 export default class E2EEcontext {
     /**
      * Build a new E2EE context instance, which will be used in a given conference.
-     *
-     * @param {string} options.salt - Salt to be used for key deviation.
-     * FIXME: We currently use the MUC room name for this which has the same lifetime
-     * as this context. While not (pseudo)random as recommended in
-     * https://developer.mozilla.org/en-US/docs/Web/API/Pbkdf2Params
-     * this is easily available and the same for all participants.
-     * We currently do not enforce a minimum length of 16 bytes either.
      */
-    constructor(options) {
-        this._options = options;
-
+    constructor() {
         // Determine the URL for the worker script. Relative URLs are relative to
         // the entry point, not the script that launches the worker.
         let baseUrl = '';
@@ -54,15 +45,6 @@ export default class E2EEcontext {
 
         this._worker = new Worker(blobUrl, { name: 'E2EE Worker' });
         this._worker.onerror = e => logger.onerror(e);
-
-        // Initialize the salt and convert it once.
-        const encoder = new TextEncoder();
-
-        // Send initial options to worker.
-        this._worker.postMessage({
-            operation: 'initialize',
-            salt: encoder.encode(options.salt)
-        });
     }
 
     /**
