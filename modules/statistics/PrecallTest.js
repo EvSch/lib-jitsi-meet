@@ -47,29 +47,25 @@ function _loadScript() {
  * @returns {Promise<void>}
  */
 function _initialize(options) {
-    console.log("We are initializing!");
     return new Promise((resolve, reject) => {
-        if (!options.disableThirdPartyRequests) {
-            const appId = options.callStatsID;
-            const appSecret = options.callStatsSecret;
-            const userId = options.statisticsId || options.statisticsDisplayName || Settings.callStatsUserName;
-            console.log("Did we get here?");
-            reject({status: 'error', message: 'ERROR!'});
-            /*api.initialize(appId, appSecret, userId, (status, message) => {
-                if (status === 'success') {
-                    api.on(PRECALL_TEST_RESULTS, (...args) => {
-                        emitter.emit(PRECALL_TEST_RESULTS, ...args);
-                    });
-                    _initialized = true;
-                    resolve();
-                } else {
-                    reject({
-                        status,
-                        message
-                    });
-                }
-            }, null, { disablePrecalltest: true });*/
-        }
+        const appId = options.callStatsID;
+        const appSecret = options.callStatsSecret;
+        const userId = options.statisticsId || options.statisticsDisplayName || Settings.callStatsUserName;
+
+        api.initialize(appId, appSecret, userId, (status, message) => {
+            if (status === 'success') {
+                api.on(PRECALL_TEST_RESULTS, (...args) => {
+                    emitter.emit(PRECALL_TEST_RESULTS, ...args);
+                });
+                _initialized = true;
+                resolve();
+            } else {
+                reject({
+                    status,
+                    message
+                });
+            }
+        }, null, { disablePrecalltest: true });
     });
 }
 
